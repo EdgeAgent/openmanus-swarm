@@ -88,9 +88,50 @@ class CronJobTogglePayload(BaseModel):
     is_active: bool = Field(..., description="Whether the job should be active")
 
 
+class DelegatePayload(BaseModel):
+    """Payload for delegating a task to a specific agent."""
+
+    agent_id: str = Field(..., description="Target agent to receive the task")
+    task: str = Field(..., description="Task description")
+
+
+class BroadcastPayload(BaseModel):
+    """Payload for broadcasting a message to all agents."""
+
+    message: str = Field(..., description="Message to send to all agents")
+
+
+class WorkflowStepPayload(BaseModel):
+    """Payload for a single step in a multi-agent workflow."""
+
+    agent_id: str = Field(..., description="Agent to execute this step")
+    task: str = Field(..., description="Task for this step")
+
+
+class WorkflowPayload(BaseModel):
+    """Payload for creating a multi-agent workflow."""
+
+    name: str = Field(..., description="Workflow name")
+    steps: list[WorkflowStepPayload] = Field(
+        ..., description="Ordered list of workflow steps"
+    )
+
+
+class CeoCommandPayload(BaseModel):
+    """Payload for natural language CEO commands."""
+
+    command: str = Field(..., description="Natural language command for the CEO")
+
+
 # ── Fleet Constant (mirrors generate_fleet.py) ───────────────────────────────
 
 FLEET_DATA: list[dict[str, str]] = [
+    {
+        "id": "ceo",
+        "name": "CEO",
+        "role": "Fleet orchestrator & decision maker",
+        "model": "meta-llama/llama-4-maverick:free",
+    },
     {
         "id": "prospector",
         "name": "PROSPECTOR",
@@ -336,7 +377,9 @@ def execute_cron_job(job_id: int) -> None:
             # Calculate next run time
             next_run_ts = ""
             try:
-                next_dt = croniter(job_dict["cron_expr"], datetime.now(timezone.utc)).get_next(datetime)
+                next_dt = croniter(
+                    job_dict["cron_expr"], datetime.now(timezone.utc)
+                ).get_next(datetime)
                 next_run_ts = next_dt.isoformat()
             except Exception:
                 next_run_ts = ""
@@ -394,7 +437,9 @@ def schedule_all_jobs() -> None:
             # Validate cron expression
             parts = cron_expr.split()
             if len(parts) != 5:
-                print(f"[cron] Invalid cron expression for job {job_id}: {cron_expr}")
+                print(
+                    f"[cron] Invalid cron expression for job {job_id}: {cron_expr}"
+                )
                 continue
             minute, hour, day, month, day_of_week = parts
             trigger = CronTrigger(
@@ -411,7 +456,9 @@ def schedule_all_jobs() -> None:
                 args=[job_id],
                 replace_existing=True,
             )
-            print(f"[cron] Scheduled job {job_id} with expression '{cron_expr}'")
+            print(
+                f"[cron] Scheduled job {job_id} with expression '{cron_expr}'"
+            )
         except Exception as exc:
             print(f"[cron] Failed to schedule job {job_id}: {exc}")
 
@@ -456,12 +503,16 @@ def get_agent(agent_id: str) -> dict[str, Any]:
             "SELECT * FROM agents WHERE id = ?", (agent_id,)
         ).fetchone()
     if not row:
-        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Agent '{agent_id}' not found"
+        )
     return dict(row)
 
 
 @app.get("/agents/{agent_id}/logs", tags=["agents"])
-def get_agent_logs(agent_id: str, limit: int = 100) -> list[dict[str, Any]]:
+def get_agent_logs(
+    agent_id: str, limit: int = 100
+) -> list[dict[str, Any]]:
     """Get recent log entries for a single agent.
 
     Parameters
@@ -485,7 +536,9 @@ def get_agent_logs(agent_id: str, limit: int = 100) -> list[dict[str, Any]]:
 
 
 @app.post("/agents/{agent_id}/task", tags=["agents"])
-def submit_task(agent_id: str, payload: TaskPayload) -> dict[str, Any]:
+def submit_task(
+    agent_id: str, payload: TaskPayload
+) -> dict[str, Any]:
     """Submit a task to a specific agent.
 
     The task is stored in the database and the agent's status is updated to
@@ -538,7 +591,8 @@ def heartbeat(payload: HeartbeatPayload) -> dict[str, Any]:
         ).fetchone()
         if not existing:
             raise HTTPException(
-                status_code=404, detail=f"Agent '{payload.agent_id}' not registered"
+                status_code=404,
+                detail=f"Agent '{payload.agent_id}' not registered",
             )
 
         conn.execute(
@@ -571,7 +625,10 @@ def heartbeat(payload: HeartbeatPayload) -> dict[str, Any]:
                 ),
             )
 
-    return {"message": "Heartbeat received", "agent_id": payload.agent_id}
+    return {
+        "message": "Heartbeat received",
+        "agent_id": payload.agent_id,
+    }
 
 
 @app.get("/metrics", tags=["system"])
@@ -637,7 +694,9 @@ def _chat_with_agent(payload: ChatMessagePayload) -> dict[str, Any]:
             "SELECT * FROM agents WHERE id = ?", (agent_id,)
         ).fetchone()
     if not agent:
-        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Agent '{agent_id}' not found"
+        )
 
     agent_dict = dict(agent)
     agent_name = agent_dict["name"]
@@ -709,7 +768,9 @@ def _chat_with_agent(payload: ChatMessagePayload) -> dict[str, Any]:
         data = resp.json()
         choices = data.get("choices", [])
         if choices:
-            assistant_message = choices[0].get("message", {}).get("content", "")
+            assistant_message = (
+                choices[0].get("message", {}).get("content", "")
+            )
         else:
             assistant_message = "(No response from model)"
     except Exception as exc:
@@ -746,7 +807,9 @@ def chat(payload: ChatMessagePayload) -> dict[str, Any]:
 
 
 @app.get("/chat/{agent_id}/history", tags=["chat"])
-def get_chat_history(agent_id: str) -> list[dict[str, Any]]:
+def get_chat_history(
+    agent_id: str,
+) -> list[dict[str, Any]]:
     """Return the last 100 chat messages for an agent, oldest first.
 
     Parameters
@@ -768,7 +831,9 @@ def get_chat_history(agent_id: str) -> list[dict[str, Any]]:
 
 
 @app.delete("/chat/{agent_id}/history", tags=["chat"])
-def clear_chat_history(agent_id: str) -> dict[str, str]:
+def clear_chat_history(
+    agent_id: str,
+) -> dict[str, str]:
     """Clear all chat history for an agent.
 
     Parameters
@@ -777,15 +842,21 @@ def clear_chat_history(agent_id: str) -> dict[str, str]:
         Unique identifier of the agent.
     """
     with get_db() as conn:
-        conn.execute("DELETE FROM chats WHERE agent_id = ?", (agent_id,))
-    return {"message": f"Chat history cleared for agent '{agent_id}'"}
+        conn.execute(
+            "DELETE FROM chats WHERE agent_id = ?", (agent_id,)
+        )
+    return {
+        "message": f"Chat history cleared for agent '{agent_id}'"
+    }
 
 
 # ── Cron Task Scheduler ───────────────────────────────────────────────────────
 
 
 @app.post("/cron-jobs", tags=["cron"])
-def create_cron_job(payload: CronJobPayload) -> dict[str, Any]:
+def create_cron_job(
+    payload: CronJobPayload,
+) -> dict[str, Any]:
     """Create a new cron job.
 
     The job is inserted into the database and, if active, scheduled in
@@ -803,16 +874,20 @@ def create_cron_job(payload: CronJobPayload) -> dict[str, Any]:
         ).fetchone()
     if not agent:
         raise HTTPException(
-            status_code=404, detail=f"Agent '{payload.agent_id}' not found"
+            status_code=404,
+            detail=f"Agent '{payload.agent_id}' not found",
         )
 
     # Calculate next run time
     try:
-        next_dt = croniter(payload.cron_expr, datetime.now(timezone.utc)).get_next(datetime)
+        next_dt = croniter(
+            payload.cron_expr, datetime.now(timezone.utc)
+        ).get_next(datetime)
         next_run = next_dt.isoformat()
     except Exception:
         raise HTTPException(
-            status_code=400, detail=f"Invalid cron expression: '{payload.cron_expr}'"
+            status_code=400,
+            detail=f"Invalid cron expression: '{payload.cron_expr}'",
         )
 
     with get_db() as conn:
@@ -885,7 +960,9 @@ def list_cron_jobs() -> list[dict[str, Any]]:
 
 
 @app.get("/cron-jobs/{job_id}", tags=["cron"])
-def get_cron_job(job_id: int) -> dict[str, Any]:
+def get_cron_job(
+    job_id: int,
+) -> dict[str, Any]:
     """Get a single cron job by ID.
 
     Parameters
@@ -904,7 +981,9 @@ def get_cron_job(job_id: int) -> dict[str, Any]:
             (job_id,),
         ).fetchone()
     if not row:
-        raise HTTPException(status_code=404, detail=f"Cron job '{job_id}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Cron job '{job_id}' not found"
+        )
     return dict(row)
 
 
@@ -928,16 +1007,20 @@ def update_cron_job(
         ).fetchone()
     if not agent:
         raise HTTPException(
-            status_code=404, detail=f"Agent '{payload.agent_id}' not found"
+            status_code=404,
+            detail=f"Agent '{payload.agent_id}' not found",
         )
 
     # Calculate next run time
     try:
-        next_dt = croniter(payload.cron_expr, datetime.now(timezone.utc)).get_next(datetime)
+        next_dt = croniter(
+            payload.cron_expr, datetime.now(timezone.utc)
+        ).get_next(datetime)
         next_run = next_dt.isoformat()
     except Exception:
         raise HTTPException(
-            status_code=400, detail=f"Invalid cron expression: '{payload.cron_expr}'"
+            status_code=400,
+            detail=f"Invalid cron expression: '{payload.cron_expr}'",
         )
 
     with get_db() as conn:
@@ -946,7 +1029,8 @@ def update_cron_job(
         ).fetchone()
         if not existing:
             raise HTTPException(
-                status_code=404, detail=f"Cron job '{job_id}' not found"
+                status_code=404,
+                detail=f"Cron job '{job_id}' not found",
             )
 
         conn.execute(
@@ -1006,7 +1090,9 @@ def update_cron_job(
 
 
 @app.delete("/cron-jobs/{job_id}", tags=["cron"])
-def delete_cron_job(job_id: int) -> dict[str, str]:
+def delete_cron_job(
+    job_id: int,
+) -> dict[str, str]:
     """Delete a cron job and all of its run history.
 
     Parameters
@@ -1020,11 +1106,16 @@ def delete_cron_job(job_id: int) -> dict[str, str]:
         ).fetchone()
         if not existing:
             raise HTTPException(
-                status_code=404, detail=f"Cron job '{job_id}' not found"
+                status_code=404,
+                detail=f"Cron job '{job_id}' not found",
             )
 
-        conn.execute("DELETE FROM cron_job_runs WHERE job_id = ?", (job_id,))
-        conn.execute("DELETE FROM cron_jobs WHERE id = ?", (job_id,))
+        conn.execute(
+            "DELETE FROM cron_job_runs WHERE job_id = ?", (job_id,)
+        )
+        conn.execute(
+            "DELETE FROM cron_jobs WHERE id = ?", (job_id,)
+        )
 
     # Remove from scheduler if present
     try:
@@ -1032,11 +1123,15 @@ def delete_cron_job(job_id: int) -> dict[str, str]:
     except Exception:
         pass
 
-    return {"message": f"Cron job '{job_id}' and its run history deleted"}
+    return {
+        "message": f"Cron job '{job_id}' and its run history deleted"
+    }
 
 
 @app.post("/cron-jobs/{job_id}/toggle", tags=["cron"])
-def toggle_cron_job(job_id: int, payload: CronJobTogglePayload) -> dict[str, Any]:
+def toggle_cron_job(
+    job_id: int, payload: CronJobTogglePayload
+) -> dict[str, Any]:
     """Toggle a cron job's active state and add or remove it from the scheduler.
 
     Parameters
@@ -1052,7 +1147,8 @@ def toggle_cron_job(job_id: int, payload: CronJobTogglePayload) -> dict[str, Any
         ).fetchone()
         if not existing:
             raise HTTPException(
-                status_code=404, detail=f"Cron job '{job_id}' not found"
+                status_code=404,
+                detail=f"Cron job '{job_id}' not found",
             )
 
         job = dict(existing)
@@ -1084,7 +1180,9 @@ def toggle_cron_job(job_id: int, payload: CronJobTogglePayload) -> dict[str, Any
                     replace_existing=True,
                 )
         except Exception as exc:
-            print(f"[cron] Failed to schedule job {job_id} on toggle: {exc}")
+            print(
+                f"[cron] Failed to schedule job {job_id} on toggle: {exc}"
+            )
     else:
         # Remove from scheduler
         try:
@@ -1107,7 +1205,9 @@ def toggle_cron_job(job_id: int, payload: CronJobTogglePayload) -> dict[str, Any
 
 
 @app.post("/cron-jobs/{job_id}/trigger", tags=["cron"])
-def trigger_cron_job(job_id: int) -> dict[str, str]:
+def trigger_cron_job(
+    job_id: int,
+) -> dict[str, str]:
     """Trigger a cron job immediately, independent of its schedule.
 
     Parameters
@@ -1121,7 +1221,8 @@ def trigger_cron_job(job_id: int) -> dict[str, str]:
         ).fetchone()
         if not existing:
             raise HTTPException(
-                status_code=404, detail=f"Cron job '{job_id}' not found"
+                status_code=404,
+                detail=f"Cron job '{job_id}' not found",
             )
 
     # Execute in the background so the HTTP response returns immediately
@@ -1136,7 +1237,9 @@ def trigger_cron_job(job_id: int) -> dict[str, str]:
 
 
 @app.get("/cron-jobs/{job_id}/runs", tags=["cron"])
-def get_cron_job_runs(job_id: int) -> list[dict[str, Any]]:
+def get_cron_job_runs(
+    job_id: int,
+) -> list[dict[str, Any]]:
     """Get the run history for a cron job.
 
     Parameters
@@ -1157,7 +1260,9 @@ def get_cron_job_runs(job_id: int) -> list[dict[str, Any]]:
 
 
 @app.get("/cron-jobs/{job_id}/runs/{run_id}", tags=["cron"])
-def get_cron_job_run(job_id: int, run_id: int) -> dict[str, Any]:
+def get_cron_job_run(
+    job_id: int, run_id: int
+) -> dict[str, Any]:
     """Get details for a single cron job run.
 
     Parameters
@@ -1177,6 +1282,346 @@ def get_cron_job_run(job_id: int, run_id: int) -> dict[str, Any]:
         ).fetchone()
     if not row:
         raise HTTPException(
-            status_code=404, detail=f"Run '{run_id}' for job '{job_id}' not found"
+            status_code=404,
+            detail=f"Run '{run_id}' for job '{job_id}' not found",
         )
     return dict(row)
+
+
+# ── CEO Orchestration ─────────────────────────────────────────────────────────
+
+
+@app.post("/orchestrate/delegate", tags=["orchestrate"])
+def delegate_task(
+    payload: DelegatePayload,
+) -> dict[str, Any]:
+    """Delegate a task to a specific agent.
+
+    The CEO uses this to assign work to individual agents.
+    The task is submitted to the agent and logged.
+    """
+    with get_db() as conn:
+        agent = conn.execute(
+            "SELECT * FROM agents WHERE id = ?", (payload.agent_id,)
+        ).fetchone()
+        if not agent:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Agent '{payload.agent_id}' not found",
+            )
+
+        # Submit task
+        conn.execute(
+            """
+            INSERT INTO tasks (agent_id, task, status, created_at)
+            VALUES (?, ?, 'pending', ?)
+            """,
+            (payload.agent_id, payload.task, now_iso()),
+        )
+        conn.execute(
+            "UPDATE agents SET status = 'busy' WHERE id = ?",
+            (payload.agent_id,),
+        )
+        conn.execute(
+            """
+            INSERT INTO agent_logs (agent_id, level, message, timestamp)
+            VALUES (?, 'info', ?, ?)
+            """,
+            (
+                payload.agent_id,
+                f"[CEO DELEGATED] {payload.task}",
+                now_iso(),
+            ),
+        )
+        # Log CEO action
+        conn.execute(
+            """
+            INSERT INTO agent_logs (agent_id, level, message, timestamp)
+            VALUES (?, 'info', ?, ?)
+            """,
+            (
+                "ceo",
+                f"Delegated to {payload.agent_id}: {payload.task}",
+                now_iso(),
+            ),
+        )
+
+    return {
+        "message": f"Task delegated to {payload.agent_id}",
+        "agent_id": payload.agent_id,
+        "task": payload.task,
+    }
+
+
+@app.post("/orchestrate/broadcast", tags=["orchestrate"])
+def broadcast_message(
+    payload: BroadcastPayload,
+) -> dict[str, Any]:
+    """Broadcast a message/task to all active agents.
+
+    The CEO uses this to send the same task to every agent.
+    """
+    with get_db() as conn:
+        agents_list = conn.execute(
+            "SELECT id FROM agents WHERE id != 'ceo'"
+        ).fetchall()
+
+        delegated = []
+        for row in agents_list:
+            agent_id = row["id"]
+            conn.execute(
+                """
+                INSERT INTO tasks (agent_id, task, status, created_at)
+                VALUES (?, ?, 'pending', ?)
+                """,
+                (agent_id, payload.message, now_iso()),
+            )
+            delegated.append(agent_id)
+
+        # Log CEO action
+        conn.execute(
+            """
+            INSERT INTO agent_logs (agent_id, level, message, timestamp)
+            VALUES (?, 'info', ?, ?)
+            """,
+            (
+                "ceo",
+                f"Broadcast to {len(delegated)} agents: {payload.message}",
+                now_iso(),
+            ),
+        )
+
+    return {
+        "message": f"Broadcast to {len(delegated)} agents",
+        "agents": delegated,
+        "task": payload.message,
+    }
+
+
+@app.get("/orchestrate/status", tags=["orchestrate"])
+def get_fleet_status() -> dict[str, Any]:
+    """Get comprehensive fleet status for CEO decision-making.
+
+    Returns all agents with their status, task counts, last heartbeats,
+    and a summary of pending tasks.
+    """
+    with get_db() as conn:
+        agents_list = conn.execute(
+            "SELECT * FROM agents ORDER BY created_at"
+        ).fetchall()
+
+        pending_tasks = conn.execute(
+            """
+            SELECT t.*, a.name as agent_name
+            FROM tasks t
+            JOIN agents a ON t.agent_id = a.id
+            WHERE t.status = 'pending'
+            ORDER BY t.created_at DESC
+            LIMIT 20
+            """
+        ).fetchall()
+
+        recent_logs = conn.execute(
+            """
+            SELECT * FROM agent_logs
+            ORDER BY timestamp DESC
+            LIMIT 50
+            """
+        ).fetchall()
+
+        status_counts = conn.execute(
+            """
+            SELECT status, COUNT(*) as count
+            FROM agents
+            GROUP BY status
+            """
+        ).fetchall()
+
+    return {
+        "agents": [dict(row) for row in agents_list],
+        "pending_tasks": [dict(row) for row in pending_tasks],
+        "recent_logs": [dict(row) for row in recent_logs],
+        "status_summary": {
+            row["status"]: row["count"] for row in status_counts
+        },
+        "timestamp": now_iso(),
+    }
+
+
+@app.post("/orchestrate/workflow", tags=["orchestrate"])
+def create_workflow(
+    payload: WorkflowPayload,
+) -> dict[str, Any]:
+    """Create a multi-agent workflow — chain tasks across multiple agents.
+
+    Each step is queued as a pending task for its agent. Steps are
+    executed in order; the CEO monitors completion of each step.
+    """
+    workflow_id = f"wf_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+
+    with get_db() as conn:
+        for idx, step in enumerate(payload.steps):
+            agent = conn.execute(
+                "SELECT 1 FROM agents WHERE id = ?", (step.agent_id,)
+            ).fetchone()
+            if not agent:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Agent '{step.agent_id}' not found",
+                )
+
+            conn.execute(
+                """
+                INSERT INTO tasks (agent_id, task, status, created_at)
+                VALUES (?, ?, 'pending', ?)
+                """,
+                (
+                    step.agent_id,
+                    f"[WF:{workflow_id} Step {idx+1}] {step.task}",
+                    now_iso(),
+                ),
+            )
+
+        # Log CEO action
+        conn.execute(
+            """
+            INSERT INTO agent_logs (agent_id, level, message, timestamp)
+            VALUES (?, 'info', ?, ?)
+            """,
+            (
+                "ceo",
+                f"Created workflow '{payload.name}' ({workflow_id}) with {len(payload.steps)} steps",
+                now_iso(),
+            ),
+        )
+
+    return {
+        "message": f"Workflow '{payload.name}' created",
+        "workflow_id": workflow_id,
+        "name": payload.name,
+        "steps_count": len(payload.steps),
+        "steps": [
+            {"agent_id": s.agent_id, "task": s.task} for s in payload.steps
+        ],
+    }
+
+
+@app.post("/orchestrate/command", tags=["orchestrate"])
+def ceo_command(
+    payload: CeoCommandPayload,
+) -> dict[str, Any]:
+    """Process a natural language CEO command.
+
+    The CEO agent interprets the command and decides what actions to take.
+    This endpoint proxies the command to the CEO's LLM and returns the
+    execution plan.
+
+    If no OPENROUTER_API_KEY is set, returns a mock response.
+    """
+    command = payload.command.lower()
+
+    # Simple keyword-based routing (CEO intelligence layer)
+    actions = []
+
+    # Check for agent-specific delegation
+    agent_keywords = {
+        "prospector": ["prospect", "lead", "research", "discover", "find"],
+        "forge": ["code", "build", "develop", "generate", "create", "implement"],
+        "lens": ["review", "audit", "check", "verify", "qa", "test"],
+        "copywriter": ["write", "content", "copy", "blog", "post", "article"],
+        "herald": ["outreach", "email", "contact", "reach", "message", "send"],
+        "ledger": ["log", "track", "report", "analytics", "metrics", "monitor"],
+    }
+
+    delegated_agents = []
+    for agent_id, keywords in agent_keywords.items():
+        if any(kw in command for kw in keywords):
+            # Extract a task description
+            task = payload.command
+            actions.append(
+                {
+                    "action": "delegate",
+                    "agent_id": agent_id,
+                    "task": task,
+                }
+            )
+            delegated_agents.append(agent_id)
+
+    # If no specific agent matched, broadcast to all
+    if not actions:
+        actions.append(
+            {
+                "action": "broadcast",
+                "message": payload.command,
+            }
+        )
+        delegated_agents = ["all"]
+
+    # Log CEO command
+    with get_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO agent_logs (agent_id, level, message, timestamp)
+            VALUES (?, 'info', ?, ?)
+            """,
+            (
+                "ceo",
+                f"Command: {payload.command} -> Delegated to: {', '.join(delegated_agents)}",
+                now_iso(),
+            ),
+        )
+
+    # If we have an API key, also send to the CEO LLM for a response
+    ceo_response = ""
+    if OPENROUTER_API_KEY:
+        try:
+            headers = {
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": DASHBOARD_ORIGIN,
+                "X-Title": "OpenManus Swarm CEO",
+            }
+            body = {
+                "model": "meta-llama/llama-4-maverick:free",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are the CEO of an AI agent swarm. You manage 6 specialized agents: "
+                            "PROSPECTOR (lead research), FORGE (code generation), LENS (review/QA), "
+                            "COPYWRITER (content), HERALD (outreach), LEDGER (analytics). "
+                            "Respond concisely with your decision and reasoning."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Fleet command: {payload.command}",
+                    },
+                ],
+            }
+            resp = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=body,
+                timeout=60,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                choices = data.get("choices", [])
+                if choices:
+                    ceo_response = (
+                        choices[0].get("message", {}).get("content", "")
+                    )
+        except Exception:
+            pass
+
+    if not ceo_response:
+        ceo_response = f"Acknowledged. Routing command to: {', '.join(delegated_agents)}."
+
+    return {
+        "command": payload.command,
+        "ceo_response": ceo_response,
+        "actions": actions,
+        "delegated_agents": delegated_agents,
+        "timestamp": now_iso(),
+    }
