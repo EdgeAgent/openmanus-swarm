@@ -6,6 +6,8 @@ import AgentGrid from './components/AgentGrid';
 import TerminalFeed from './components/TerminalFeed';
 import ControlPanel from './components/ControlPanel';
 import AgentDetail from './components/AgentDetail';
+import ChatInterface from './components/ChatInterface';
+import Scheduler from './components/Scheduler';
 
 function Dashboard() {
   const { agents, metrics, loading, error } = useFleet();
@@ -49,12 +51,32 @@ function AgentDetailPage() {
   );
 }
 
+function ChatPage() {
+  const { agents, metrics } = useFleet();
+  return (
+    <Layout agents={agents} metrics={metrics}>
+      <ChatInterface agents={agents} />
+    </Layout>
+  );
+}
+
+function SchedulerPage() {
+  const { agents, metrics } = useFleet();
+  return (
+    <Layout agents={agents} metrics={metrics}>
+      <Scheduler agents={agents} />
+    </Layout>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/agent/:id" element={<AgentDetailPage />} />
+        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/scheduler" element={<SchedulerPage />} />
       </Routes>
     </BrowserRouter>
   );
