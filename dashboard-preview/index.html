@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDGE SWARM CONTROL</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --bg-card: #13131f;
+    --border: #1e1e2e;
+    --text-primary: #e2e2ea;
+    --text-secondary: #6e6e80;
+    --text-error: #ff4d4d;
+    --cyan: #00f0ff;
+    --orange: #ff6b35;
+    --purple: #a78bfa;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --pink: #f472b6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 20px; position: relative; z-index: 1; }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .header h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 2px;
+  }
+  .header h1 span { color: var(--cyan); }
+  .metrics-bar {
+    display: flex;
+    gap: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .metric { display: flex; align-items: center; gap: 6px; }
+  .metric-label { color: var(--text-secondary); }
+  .metric-value { font-weight: 600; }
+
+  .section-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: var(--green);
+    border-radius: 2px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 1024px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+
+  .agent-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    transition: border-color 0.2s, transform 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .agent-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    border-radius: 8px 0 0 8px;
+  }
+  .agent-card.prospector::before { background: var(--cyan); }
+  .agent-card.forge::before { background: var(--orange); }
+  .agent-card.lens::before { background: var(--purple); }
+  .agent-card.copywriter::before { background: var(--green); }
+  .agent-card.herald::before { background: var(--amber); }
+  .agent-card.ledger::before { background: var(--pink); }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .agent-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .prospector .agent-name { color: var(--cyan); }
+  .forge .agent-name { color: var(--orange); }
+  .lens .agent-name { color: var(--purple); }
+  .copywriter .agent-name { color: var(--green); }
+  .herald .agent-name { color: var(--amber); }
+  .ledger .agent-name { color: var(--pink); }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    position: relative;
+  }
+  .status-dot.idle { background: var(--green); box-shadow: 0 0 8px rgba(52,211,153,0.5); }
+  .status-dot.busy { background: var(--amber); box-shadow: 0 0 8px rgba(251,191,36,0.5); }
+  .status-dot.error { background: var(--text-error); box-shadow: 0 0 8px rgba(255,77,77,0.5); }
+  .status-dot.offline { background: var(--text-secondary); }
+  .status-dot.idle::after, .status-dot.busy::after, .status-dot.error::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    animation: pulse 2s ease-out infinite;
+    opacity: 0.6;
+  }
+  @keyframes pulse {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(2); opacity: 0; }
+  }
+
+  .agent-role { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
+  .agent-model {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-secondary);
+    opacity: 0.6;
+    margin-bottom: 16px;
+  }
+  .agent-stats {
+    display: flex;
+    gap: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+  }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat-label { color: var(--text-secondary); }
+  .stat-value { font-weight: 600; }
+
+  .terminal {
+    background: #0d0d14;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .terminal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .terminal-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+  }
+  .terminal-body {
+    padding: 12px 16px;
+    max-height: 280px;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.8;
+  }
+  .log-line { display: flex; gap: 12px; }
+  .log-time { color: var(--text-secondary); opacity: 0.5; min-width: 60px; }
+  .log-agent { min-width: 70px; }
+  .log-agent.prospector { color: var(--cyan); }
+  .log-agent.forge { color: var(--orange); }
+  .log-agent.lens { color: var(--purple); }
+  .log-agent.copywriter { color: var(--green); }
+  .log-agent.herald { color: var(--amber); }
+  .log-agent.ledger { color: var(--pink); }
+  .log-msg { color: var(--text-primary); }
+  .log-msg.warn { color: var(--amber); }
+  .log-msg.error { color: var(--text-error); }
+
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 10px 20px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn:hover {
+    border-color: var(--green);
+    color: var(--green);
+    background: rgba(52,211,153,0.05);
+  }
+  .btn.stop:hover {
+    border-color: var(--text-error);
+    color: var(--text-error);
+    background: rgba(255,77,77,0.05);
+  }
+  .btn.restart:hover {
+    border-color: var(--amber);
+    color: var(--amber);
+    background: rgba(251,191,36,0.05);
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>EDGE <span>SWARM</span> CONTROL</h1>
+    <div class="metrics-bar">
+      <div class="metric"><span class="metric-label">AGENTS</span><span class="metric-value">6</span></div>
+      <div class="metric"><span class="metric-label">ACTIVE</span><span class="metric-value" style="color:var(--green)">4</span></div>
+      <div class="metric"><span class="metric-label">BUSY</span><span class="metric-value" style="color:var(--amber)">1</span></div>
+      <div class="metric"><span class="metric-label">TASKS</span><span class="metric-value">47</span></div>
+    </div>
+  </div>
+
+  <div class="section-title">AGENT VMs</div>
+  <div class="grid" id="agentGrid"></div>
+
+  <div class="terminal">
+    <div class="terminal-header">
+      <span class="terminal-title">LIVE FEED</span>
+      <span class="terminal-title" style="color:var(--green)">● CONNECTED</span>
+    </div>
+    <div class="terminal-body" id="terminalFeed"></div>
+  </div>
+
+  <div class="section-title">FLEET CONTROL</div>
+  <div class="controls">
+    <button class="btn">START ALL</button>
+    <button class="btn stop">STOP ALL</button>
+    <button class="btn restart">RESTART FLEET</button>
+  </div>
+
+</div>
+
+<script>
+const agents = [
+  { id: 'prospector', name: 'PROSPECTOR', role: 'Lead Research', model: 'llama-4-maverick:free', status: 'idle', tasks: 12, heartbeat: '2s ago', color: '#00f0ff' },
+  { id: 'forge', name: 'FORGE', role: 'Code Generation', model: 'gemini-2.5-pro:free', status: 'busy', tasks: 8, heartbeat: '1s ago', color: '#ff6b35' },
+  { id: 'lens', name: 'LENS', role: 'Review & QA', model: 'deepseek-chat:free', status: 'idle', tasks: 15, heartbeat: '4s ago', color: '#a78bfa' },
+  { id: 'copywriter', name: 'COPYWRITER', role: 'Content Creation', model: 'qwen3-235b:free', status: 'error', tasks: 3, heartbeat: '45s ago', color: '#34d399' },
+  { id: 'herald', name: 'HERALD', role: 'Outreach', model: 'nemotron-4:free', status: 'offline', tasks: 0, heartbeat: '-', color: '#fbbf24' },
+  { id: 'ledger', name: 'LEDGER', role: 'Analytics', model: 'kimi-k2:free', status: 'idle', tasks: 9, heartbeat: '3s ago', color: '#f472b6' },
+];
+
+function renderAgents() {
+  const grid = document.getElementById('agentGrid');
+  grid.innerHTML = agents.map(a => `
+    <div class="agent-card ${a.id}">
+      <div class="card-header">
+        <span class="agent-name">${a.name}</span>
+        <span class="status-dot ${a.status}"></span>
+      </div>
+      <div class="agent-role">${a.role}</div>
+      <div class="agent-model">${a.model}</div>
+      <div class="agent-stats">
+        <div class="stat"><span class="stat-label">TASKS</span><span class="stat-value">${a.tasks}</span></div>
+        <div class="stat"><span class="stat-label">STATUS</span><span class="stat-value" style="color:${a.status === 'idle' ? 'var(--green)' : a.status === 'busy' ? 'var(--amber)' : a.status === 'error' ? 'var(--text-error)' : 'var(--text-secondary)'}">${a.status.toUpperCase()}</span></div>
+        <div class="stat"><span class="stat-label">HEARTBEAT</span><span class="stat-value">${a.heartbeat}</span></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+const logMessages = [
+  { agent: 'prospector', level: 'info', msg: 'Scanning for leads in target market...' },
+  { agent: 'forge', level: 'info', msg: 'Building React component scaffold...' },
+  { agent: 'lens', level: 'info', msg: 'Code review passed: 0 issues found' },
+  { agent: 'copywriter', level: 'error', msg: 'API rate limit exceeded, backing off...' },
+  { agent: 'ledger', level: 'info', msg: 'Aggregating task metrics...' },
+  { agent: 'forge', level: 'warn', msg: 'Deprecation warning: old API endpoint' },
+  { agent: 'prospector', level: 'info', msg: 'Discovered 23 new prospects' },
+  { agent: 'lens', level: 'info', msg: 'Running security audit on dependencies' },
+  { agent: 'ledger', level: 'info', msg: 'Heartbeat received from forge' },
+  { agent: 'copywriter', level: 'warn', msg: 'Retrying connection attempt 2/5' },
+];
+
+let logIndex = 0;
+function addLog() {
+  const feed = document.getElementById('terminalFeed');
+  const entry = logMessages[logIndex % logMessages.length];
+  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-time">${time}</span><span class="log-agent ${entry.agent}">${entry.agent.toUpperCase()}</span><span class="log-msg ${entry.level}">${entry.msg}</span>`;
+  feed.appendChild(line);
+  if (feed.children.length > 50) feed.removeChild(feed.firstChild);
+  feed.scrollTop = feed.scrollHeight;
+  logIndex++;
+}
+
+renderAgents();
+for (let i = 0; i < 8; i++) addLog();
+setInterval(addLog, 2000);
+
+setInterval(() => {
+  const idx = Math.floor(Math.random() * agents.length);
+  const statuses = ['idle', 'busy', 'error', 'offline'];
+  agents[idx].status = statuses[Math.floor(Math.random() * statuses.length)];
+  agents[idx].heartbeat = Math.floor(Math.random() * 10) + 's ago';
+  if (agents[idx].status === 'busy') agents[idx].tasks++;
+  renderAgents();
+}, 8000);
+</script>
+</body>
+</html>
